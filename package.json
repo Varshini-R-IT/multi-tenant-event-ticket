@@ -1,0 +1,16 @@
+{
+  "name": "wt-assignment-multi-tenant-reservation",
+  "version": "1.0.0",
+  "description": "Multi-Tenant Event & Ticket Reservation System with Atomic Concurrency Controls",
+  "scripts": {
+    "dev": "concurrently -n \"BACKEND,FRONTEND\" -c \"magenta,cyan\" \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\"",
+    "dev:backend": "npm run dev --prefix backend",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "seed": "npm run seed --prefix backend",
+    "test:concurrency": "npm run test:concurrency --prefix backend",
+    "build": "npm run build --prefix frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

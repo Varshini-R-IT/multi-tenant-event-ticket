@@ -1,0 +1,620 @@
+{
+  "info": {
+    "_postman_id": "a9b7c123-e456-4789-bf01-89abdef12345",
+    "name": "Multi-Tenant Event & Ticket Reservation System API",
+    "description": "Comprehensive test suite for the Multi-Tenant Event & Tiered Ticket Reservation Engine.\n\nCovers:\n1. Role-Based Access Control (Admin, Organizer, Attendee)\n2. Event Management with Tiers & Sales Cut-Off Dates\n3. Redis Caching Verification (X-Cache header HIT/MISS)\n4. 10-Minute Temporary Hold Reservation Engine\n5. Race Condition & Concurrency Edge Cases (409 Conflict)\n6. Mock Payment Gateway Simulation (Instant Approval, Card Decline, Async Webhook)\n7. Order & QR Code Digital Ticket Generation\n8. Multi-Tenant Revenue & Conversion Funnel Analytics\n9. Background Worker Expired Hold Cleanup",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000/api",
+      "type": "string"
+    },
+    {
+      "key": "adminToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "organizerToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "attendeeToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "activeEventId",
+      "value": "evt_ai_cloud_2026",
+      "type": "string"
+    },
+    {
+      "key": "activeTierId",
+      "value": "tier_ai_ga",
+      "type": "string"
+    },
+    {
+      "key": "reservationId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "orderId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Authentication & RBAC",
+      "item": [
+        {
+          "name": "Login as Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "pm.test('Admin token returned', function () {",
+                  "    pm.expect(json.token).to.be.a('string');",
+                  "    pm.expect(json.user.role).to.eql('ADMIN');",
+                  "    pm.collectionVariables.set('adminToken', json.token);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@eventreserve.com\",\n  \"password\": \"admin123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Login as Organizer (Sarah)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "pm.test('Organizer token returned with Tenant', function () {",
+                  "    pm.expect(json.token).to.be.a('string');",
+                  "    pm.expect(json.user.role).to.eql('ORGANIZER');",
+                  "    pm.expect(json.user.tenantId).to.be.ok;",
+                  "    pm.collectionVariables.set('organizerToken', json.token);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"sarah@techsummit.io\",\n  \"password\": \"organizer123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Login as Attendee (Alice)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "pm.test('Attendee token returned', function () {",
+                  "    pm.expect(json.token).to.be.a('string');",
+                  "    pm.expect(json.user.role).to.eql('ATTENDEE');",
+                  "    pm.collectionVariables.set('attendeeToken', json.token);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"alice@example.com\",\n  \"password\": \"attendee123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Get Demo Quick-Switch Accounts",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/auth/demo-accounts", "host": ["{{baseUrl}}"], "path": ["auth", "demo-accounts"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Events & Caching Layer",
+      "item": [
+        {
+          "name": "Get All Events (Check X-Cache Header)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Cache header present', function () {",
+                  "    pm.expect(pm.response.headers.has('X-Cache')).to.be.true;",
+                  "});",
+                  "const json = pm.response.json();",
+                  "if (json.events && json.events.length > 0) {",
+                  "    pm.collectionVariables.set('activeEventId', json.events[0].id);",
+                  "    if (json.events[0].tiers && json.events[0].tiers.length > 0) {",
+                  "        pm.collectionVariables.set('activeTierId', json.events[0].tiers[0].id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/events", "host": ["{{baseUrl}}"], "path": ["events"] }
+          }
+        },
+        {
+          "name": "Get Event Details by ID (Cached)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "pm.test('Event has tiered tickets', function () {",
+                  "    pm.expect(json.event.tiers).to.be.an('array');",
+                  "    pm.expect(json.event.tiers.length).to.be.above(0);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/events/{{activeEventId}}", "host": ["{{baseUrl}}"], "path": ["events", "{{activeEventId}}"] }
+          }
+        },
+        {
+          "name": "Create Event with Ticket Tiers (Organizer)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{organizerToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Distributed Systems Summit 2026\",\n  \"description\": \"Mastering high concurrency, event-driven architectures, and distributed transactions.\",\n  \"category\": \"Technology\",\n  \"venue\": \"Austin Convention Center & Remote Live Stream\",\n  \"startDate\": \"2026-11-15T09:00:00Z\",\n  \"salesCutoffDate\": \"2026-11-14T23:59:59Z\",\n  \"tiers\": [\n    {\n      \"name\": \"VIP Pass\",\n      \"price\": 399.00,\n      \"totalQuantity\": 40,\n      \"maxPerOrder\": 4\n    },\n    {\n      \"name\": \"General Admission\",\n      \"price\": 149.00,\n      \"totalQuantity\": 200,\n      \"maxPerOrder\": 6\n    }\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/events", "host": ["{{baseUrl}}"], "path": ["events"] }
+          }
+        },
+        {
+          "name": "RBAC Edge Case: Attendee Forbidden from Creating Events",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 403 Forbidden', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "pm.test('Error code is FORBIDDEN', function () {",
+                  "    pm.expect(json.code).to.eql('FORBIDDEN');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{attendeeToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Unauthorized Event Attempt\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/events", "host": ["{{baseUrl}}"], "path": ["events"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. 10-Minute Hold Reservation Engine",
+      "item": [
+        {
+          "name": "Create 10-Minute Temporary Hold",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "pm.test('Reservation is in HELD status with 10min expiry', function () {",
+                  "    pm.expect(json.hold.status).to.eql('HELD');",
+                  "    pm.expect(json.hold.secondsRemaining).to.be.above(550);",
+                  "    pm.expect(json.hold.holdToken).to.be.ok;",
+                  "    pm.collectionVariables.set('reservationId', json.hold.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{attendeeToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tierId\": \"{{activeTierId}}\",\n  \"quantity\": 2\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/reservations/hold", "host": ["{{baseUrl}}"], "path": ["reservations", "hold"] }
+          }
+        },
+        {
+          "name": "Get Hold Details & Live Countdown",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "pm.test('Contains remaining countdown seconds', function () {",
+                  "    pm.expect(json.reservation.secondsRemaining).to.be.a('number');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/reservations/{{reservationId}}", "host": ["{{baseUrl}}"], "path": ["reservations", "{{reservationId}}"] }
+          }
+        },
+        {
+          "name": "Concurrency Edge Case: Sold Out / Insufficient Quantity Conflict",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 409 Conflict', function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "pm.test('Conflict error returned', function () {",
+                  "    pm.expect(json.code).to.eql('TICKETS_UNAVAILABLE');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tierId\": \"tier_ai_earlybird\",\n  \"quantity\": 1\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/reservations/hold", "host": ["{{baseUrl}}"], "path": ["reservations", "hold"] }
+          }
+        },
+        {
+          "name": "Release Hold Early (Attendee cancels)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{attendeeToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/reservations/{{reservationId}}/release", "host": ["{{baseUrl}}"], "path": ["reservations", "{{reservationId}}", "release"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Mock Payment Gateway & Order Checkout",
+      "item": [
+        {
+          "name": "Create Fresh Hold for Checkout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('reservationId', json.hold.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{attendeeToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tierId\": \"{{activeTierId}}\",\n  \"quantity\": 1\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/reservations/hold", "host": ["{{baseUrl}}"], "path": ["reservations", "hold"] }
+          }
+        },
+        {
+          "name": "Checkout: Instant Mock Approval (Generates Digital Tickets)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "pm.test('Payment approved and tickets generated with QR code', function () {",
+                  "    pm.expect(json.status).to.eql('SUCCESS');",
+                  "    pm.expect(json.order.orderNumber).to.be.ok;",
+                  "    pm.expect(json.tickets.length).to.be.above(0);",
+                  "    pm.expect(json.tickets[0].qrCode).to.include('data:image/png;base64');",
+                  "    pm.collectionVariables.set('orderId', json.order.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{attendeeToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reservationId\": \"{{reservationId}}\",\n  \"cardNumber\": \"4242424242424242\",\n  \"cardHolder\": \"Alice Johnson\",\n  \"simulationMode\": \"APPROVE\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/payments/charge", "host": ["{{baseUrl}}"], "path": ["payments", "charge"] }
+          }
+        },
+        {
+          "name": "Checkout Edge Case: Mock Card Decline (Auto-Releases Seats)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Create a temporary hold first",
+                  "pm.sendRequest({",
+                  "    url: pm.collectionVariables.get('baseUrl') + '/reservations/hold',",
+                  "    method: 'POST',",
+                  "    header: { 'Content-Type': 'application/json' },",
+                  "    body: { mode: 'raw', raw: JSON.stringify({ tierId: pm.collectionVariables.get('activeTierId'), quantity: 1 }) }",
+                  "}, function (err, res) {",
+                  "    const data = res.json();",
+                  "    pm.collectionVariables.set('tempHoldForDecline', data.hold.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "pm.test('Payment declined and seats released', function () {",
+                  "    pm.expect(json.status).to.eql('FAILED');",
+                  "    pm.expect(json.message).to.include('released');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reservationId\": \"{{tempHoldForDecline}}\",\n  \"cardNumber\": \"4000000000000002\",\n  \"simulationMode\": \"REJECT\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/payments/charge", "host": ["{{baseUrl}}"], "path": ["payments", "charge"] }
+          }
+        },
+        {
+          "name": "Get My Orders (Attendee)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{attendeeToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/orders/my-orders", "host": ["{{baseUrl}}"], "path": ["orders", "my-orders"] }
+          }
+        },
+        {
+          "name": "Get My Digital Tickets with QR Codes",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{attendeeToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/orders/my-tickets", "host": ["{{baseUrl}}"], "path": ["orders", "my-tickets"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Analytics Dashboard & Multi-Tenancy",
+      "item": [
+        {
+          "name": "Get Organizer Scoped Analytics",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "pm.test('Conversion funnel and KPIs present', function () {",
+                  "    pm.expect(json.analytics.kpis).to.be.an('object');",
+                  "    pm.expect(json.analytics.funnel).to.be.an('object');",
+                  "    pm.expect(json.analytics.tierBreakdown).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{organizerToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/analytics/dashboard", "host": ["{{baseUrl}}"], "path": ["analytics", "dashboard"] }
+          }
+        },
+        {
+          "name": "Get Admin Platform-Wide Analytics",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "const json = pm.response.json();",
+                  "pm.test('Admin sees tenant list for filtering', function () {",
+                  "    pm.expect(json.tenants).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/analytics/dashboard", "host": ["{{baseUrl}}"], "path": ["analytics", "dashboard"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Background Worker Maintenance",
+      "item": [
+        {
+          "name": "Trigger Expired Hold Cleanup Worker",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{baseUrl}}/worker/cleanup-holds", "host": ["{{baseUrl}}"], "path": ["worker", "cleanup-holds"] }
+          }
+        }
+      ]
+    }
+  ]
+}

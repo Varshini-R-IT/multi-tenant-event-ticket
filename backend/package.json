@@ -1,0 +1,26 @@
+{
+  "name": "event-reservation-backend",
+  "version": "1.0.0",
+  "description": "Multi-Tenant Event & Tiered Ticket Reservation Engine with Atomic Concurrency Controls",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "seed": "node src/seed.js",
+    "test:concurrency": "node tests/concurrency.test.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "ioredis": "^5.4.2",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "node-cron": "^3.0.3",
+    "pg": "^8.13.1",
+    "qrcode": "^1.5.4",
+    "sql.js": "^1.12.0",
+    "uuid": "^11.0.5"
+  }
+}
