@@ -1,4 +1,8 @@
-const API_BASE = '/api';
+// In production (Vercel), VITE_API_URL = 'https://multi-tenant-event-ticket-api.onrender.com'
+// In local dev, Vite proxy forwards '/api' → 'http://localhost:5000'
+const API_BASE = import.meta.env.VITE_API_URL
+  ? `${import.meta.env.VITE_API_URL}/api`
+  : '/api';
 
 /**
  * Enhanced fetch wrapper with auth token and error normalization

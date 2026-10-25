@@ -1,7 +1,8 @@
 {
-  "buildCommand": "npm run build --prefix frontend",
+  "buildCommand": "cd frontend && npm install && npm run build",
   "outputDirectory": "frontend/dist",
-  "framework": "vite",
+  "installCommand": "cd frontend && npm install",
+  "framework": null,
   "rewrites": [
     {
       "source": "/api/(.*)",
@@ -10,6 +11,14 @@
     {
       "source": "/(.*)",
       "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" }
+      ]
     }
   ]
 }

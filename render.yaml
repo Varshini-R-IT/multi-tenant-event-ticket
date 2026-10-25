@@ -5,7 +5,7 @@ services:
     runtime: node
     rootDir: backend
     buildCommand: npm install
-    startCommand: npm start
+    startCommand: node src/server.js
     plan: free
     autoDeploy: true
     envVars:
@@ -15,14 +15,6 @@ services:
         value: 10000
       - key: JWT_SECRET
         generateValue: true
-      - key: DATABASE_URL
-        fromDatabase:
-          name: event-ticket-postgres
-          property: connectionString
-
-databases:
-  # Managed PostgreSQL Database on Render
-  - name: event-ticket-postgres
-    databaseName: event_reservations
-    user: postgres_admin
-    plan: free
+      # DATABASE_URL is intentionally omitted here so the backend falls back
+      # to the built-in SQLite (sql.js WASM) engine — zero-config, no extra services needed.
+      # To use PostgreSQL, add DATABASE_URL as a custom env var pointing to your DB.
